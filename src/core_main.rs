@@ -699,6 +699,15 @@ pub fn core_main() -> Option<Vec<String>> {
             #[cfg(feature = "hwcodec")]
             crate::ipc::hwcodec_process();
             return None;
+        } else if args[0] == "--exec" {
+            let code = match crate::console_terminal::run(&args) {
+                Ok(code) => code,
+                Err(err) => {
+                    eprintln!("{err}");
+                    1
+                }
+            };
+            std::process::exit(code);
         } else if args[0] == "--terminal-helper" {
             // Terminal helper process - runs as user to create ConPTY
             // This is needed because ConPTY has compatibility issues with CreateProcessAsUserW
