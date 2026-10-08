@@ -85,6 +85,11 @@ void showServerSettingsWithValue(
     relayServerMsg,
     apiServerMsg,
   ];
+  final serverFixed = isOptionFixed('custom-rendezvous-server') ||
+      isOptionFixed('relay-server') ||
+      isOptionFixed('api-server') ||
+      isOptionFixed('key');
+  var useOfficial = serverConfig.idServer.isEmpty;
 
   dialogManager.show((setState, close, context) {
     Future<bool> submit() async {
@@ -140,6 +145,69 @@ void showServerSettingsWithValue(
       ).workaroundFreezeLinuxMint();
     }
 
+    Future<void> onSwitchProfile(String profile) async {
+      if (isInProgress) return;
+      setState(() {
+        isInProgress = true;
+      });
+      try {
+        final saved = (await bind.mainGetOption(key: 'intranet-rendezvous-server'))
+            .trim();
+        if (saved.isEmpty &&
+            profile == 'intranet' &&
+            idCtrl.text.trim().isNotEmpty) {
+          final rememberErr = await rememberIntranetServer(ServerConfig(
+              idServer: idCtrl.text,
+              relayServer: relayCtrl.text,
+              apiServer: apiCtrl.text,
+              key: keyCtrl.text));
+          if (rememberErr.isNotEmpty) {
+            if (rememberErr == 'invalid_http') {
+              apiServerMsg.value =
+                  '${translate("API Server")}: ${translate("invalid_http")}';
+            }
+            showToast(translate('Failed'));
+            return;
+          }
+        } else if (saved.isEmpty && serverConfig.idServer.isNotEmpty) {
+          await rememberIntranetServer(serverConfig, checkApi: false);
+        }
+        final result = await switchServerProfile(profile);
+        final err = result.$1;
+        if (err.isEmpty) {
+          final applied = result.$2;
+          idCtrl.text = applied.idServer;
+          relayCtrl.text = applied.relayServer;
+          apiCtrl.text = applied.apiServer;
+          keyCtrl.text = applied.key;
+          idServerMsg.value = '';
+          relayServerMsg.value = '';
+          apiServerMsg.value = '';
+          useOfficial = profile == 'official';
+          showToast(translate('Successful'));
+          upSetState?.call(() {});
+        } else {
+          showToast(translate(err));
+        }
+      } finally {
+        setState(() {
+          isInProgress = false;
+        });
+      }
+    }
+
+    Widget profileButton(String label, bool selected, String profile) {
+      return Expanded(
+        child: dialogButton(
+          label,
+          isOutline: !selected,
+          onPressed: serverFixed || isInProgress
+              ? null
+              : () => onSwitchProfile(profile),
+        ),
+      );
+    }
+
     return CustomAlertDialog(
       title: Row(
         children: [
@@ -153,6 +221,18 @@ void showServerSettingsWithValue(
           child: Obx(() => Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (isDesktop) ...[
+                    Row(
+                      children: [
+                        profileButton(
+                            'Official server', useOfficial, 'official'),
+                        SizedBox(width: 8),
+                        profileButton(
+                            'Intranet server', !useOfficial, 'intranet'),
+                      ],
+                    ),
+                    SizedBox(height: 12),
+                  ],
                   buildField(translate('ID Server'), idCtrl, idServerMsg.value,
                       autofocus: true),
                   SizedBox(height: 8),
@@ -194,6 +274,17 @@ void showServerSettingsWithValue(
           'OK',
           onPressed: () async {
             if (await submit()) {
+              if (isDesktop && idCtrl.text.trim().isNotEmpty) {
+                final rememberErr = await rememberIntranetServer(ServerConfig(
+                    idServer: idCtrl.text,
+                    relayServer: relayCtrl.text,
+                    apiServer: apiCtrl.text,
+                    key: keyCtrl.text));
+                if (rememberErr.isNotEmpty) {
+                  showToast(translate('Failed'));
+                  return;
+                }
+              }
               close();
               showToast(translate('Successful'));
               upSetState?.call(() {});
