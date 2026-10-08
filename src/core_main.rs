@@ -539,6 +539,9 @@ pub fn core_main() -> Option<Vec<String>> {
                 println!("Installation and administrative privileges required!");
             }
             return None;
+        } else if args[0] == "--switch-server" {
+            switch_server_from_cli(&args);
+            return None;
         } else if args[0] == "--assign" {
             if config::Config::no_register_device() {
                 println!("Cannot assign an unregistrable device!");
@@ -883,9 +886,36 @@ fn is_user_main_ipc_scope_cli_command(args: &[String]) -> bool {
             | Some("--set-id")
             | Some("--config")
             | Some("--option")
+            | Some("--switch-server")
             | Some("--assign")
             | Some("--deploy")
     )
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn switch_server_from_cli(args: &[String]) {
+    use base::config::server_profile::apply_server_profile;
+
+    if is_cli_setting_change_disabled() {
+        println!("Settings are disabled!");
+        return;
+    }
+    if !(crate::platform::is_installed() && is_root()) {
+        println!("Installation and administrative privileges required!");
+        return;
+    }
+    if args.len() != 2 {
+        println!("Usage: --switch-server official|intranet");
+        return;
+    }
+    let mut options = crate::ipc::get_options();
+    match apply_server_profile(&mut options, &args[1]) {
+        Ok(()) => match crate::ipc::set_options(options) {
+            Ok(()) => println!("Done!"),
+            Err(err) => println!("{err}"),
+        },
+        Err(err) => println!("{err}"),
+    }
 }
 
 #[inline]
@@ -930,6 +960,7 @@ mod tests {
             "--set-id",
             "--config",
             "--option",
+            "--switch-server",
             "--assign",
             "--deploy",
         ] {

@@ -76,6 +76,12 @@ pub const OPTION_TEMPORARY_PASSWORD_LENGTH: &str = "temporary-password-length";
 pub const OPTION_CUSTOM_RENDEZVOUS_SERVER: &str = "custom-rendezvous-server";
 pub const OPTION_API_SERVER: &str = "api-server";
 pub const OPTION_KEY: &str = "key";
+// Saved intranet server. The profile switch copies these into the active
+// custom-rendezvous-server, relay-server, api-server, and key options.
+pub const OPTION_INTRANET_RENDEZVOUS_SERVER: &str = "intranet-rendezvous-server";
+pub const OPTION_INTRANET_RELAY_SERVER: &str = "intranet-relay-server";
+pub const OPTION_INTRANET_API_SERVER: &str = "intranet-api-server";
+pub const OPTION_INTRANET_KEY: &str = "intranet-key";
 pub const OPTION_PRESET_ADDRESS_BOOK_NAME: &str = "preset-address-book-name";
 pub const OPTION_PRESET_ADDRESS_BOOK_TAG: &str = "preset-address-book-tag";
 pub const OPTION_PRESET_ADDRESS_BOOK_ALIAS: &str = "preset-address-book-alias";

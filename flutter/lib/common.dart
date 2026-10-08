@@ -3642,6 +3642,78 @@ Future<bool> setServerConfig(
   return true;
 }
 
+String _trimServerField(String input) {
+  var value = input.trim();
+  if (value.endsWith('/')) {
+    value = value.substring(0, value.length - 1);
+  }
+  return value;
+}
+
+ServerConfig _normalizedServer(ServerConfig config) {
+  return ServerConfig(
+    idServer: _trimServerField(config.idServer),
+    relayServer: _trimServerField(config.relayServer),
+    apiServer: _trimServerField(config.apiServer),
+    key: config.key.trim(),
+  );
+}
+
+Future<void> _applyActiveServer(ServerConfig config) async {
+  final oldApiServer = await bind.mainGetApiServer();
+  await bind.mainSetOption(
+      key: 'custom-rendezvous-server', value: config.idServer);
+  await bind.mainSetOption(key: 'relay-server', value: config.relayServer);
+  await bind.mainSetOption(key: 'api-server', value: config.apiServer);
+  await bind.mainSetOption(key: 'key', value: config.key);
+  final newApiServer = await bind.mainGetApiServer();
+  if (oldApiServer.isNotEmpty &&
+      oldApiServer != newApiServer &&
+      gFFI.userModel.isLogin) {
+    gFFI.userModel.logOut(apiServer: oldApiServer);
+  }
+}
+
+Future<String> rememberIntranetServer(ServerConfig config,
+    {bool checkApi = true}) async {
+  final saved = _normalizedServer(config);
+  if (checkApi &&
+      saved.apiServer.isNotEmpty &&
+      !saved.apiServer.startsWith('http://') &&
+      !saved.apiServer.startsWith('https://')) {
+    return 'invalid_http';
+  }
+  await bind.mainSetOption(
+      key: 'intranet-rendezvous-server', value: saved.idServer);
+  await bind.mainSetOption(
+      key: 'intranet-relay-server', value: saved.relayServer);
+  await bind.mainSetOption(key: 'intranet-api-server', value: saved.apiServer);
+  await bind.mainSetOption(key: 'intranet-key', value: saved.key);
+  return '';
+}
+
+Future<(String, ServerConfig)> switchServerProfile(String profile) async {
+  if (profile == 'official') {
+    final applied = ServerConfig();
+    await _applyActiveServer(applied);
+    return ('', applied);
+  }
+  if (profile != 'intranet') {
+    return ('Unknown server profile', ServerConfig());
+  }
+  final applied = ServerConfig(
+    idServer: await bind.mainGetOption(key: 'intranet-rendezvous-server'),
+    relayServer: await bind.mainGetOption(key: 'intranet-relay-server'),
+    apiServer: await bind.mainGetOption(key: 'intranet-api-server'),
+    key: await bind.mainGetOption(key: 'intranet-key'),
+  );
+  if (applied.idServer.isEmpty) {
+    return ('Intranet server is not set', ServerConfig());
+  }
+  await _applyActiveServer(applied);
+  return ('', applied);
+}
+
 ColorFilter? svgColor(Color? color) {
   if (color == null) {
     return null;
