@@ -1384,6 +1384,9 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             // if (usePassword)
             //   hide_cm(!locked).marginOnly(left: _kContentHSubMargin - 6),
             if (usePassword) radios[2],
+            _DefaultConnectPasswordField(
+              enabled: !locked && !isOptionFixed(kOptionDefaultConnectPassword),
+            ),
           ]);
         })));
   }
@@ -2926,6 +2929,91 @@ Widget _Button(String label, Function() onPressed,
   return Row(children: [
     child,
   ]).marginOnly(left: _kContentHMargin);
+}
+
+class _DefaultConnectPasswordField extends StatefulWidget {
+  const _DefaultConnectPasswordField({required this.enabled});
+
+  final bool enabled;
+
+  @override
+  State<_DefaultConnectPasswordField> createState() =>
+      _DefaultConnectPasswordFieldState();
+}
+
+class _DefaultConnectPasswordFieldState
+    extends State<_DefaultConnectPasswordField> {
+  late final TextEditingController _controller;
+  bool _obscure = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+        text: bind.mainGetOptionSync(key: kOptionDefaultConnectPassword));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _apply() async {
+    await bind.mainSetOption(
+        key: kOptionDefaultConnectPassword, value: _controller.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.enabled;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          translate('Default connect password'),
+          style: TextStyle(color: disabledTextColor(context, enabled)),
+        ),
+        Text(
+          translate('default-connect-password-tip'),
+          style: TextStyle(
+            fontSize: 12,
+            color: disabledTextColor(context, enabled),
+          ),
+        ).marginOnly(top: 2, bottom: 6),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _controller,
+                enabled: enabled,
+                obscureText: _obscure,
+                autocorrect: false,
+                onSubmitted: enabled ? (_) => _apply() : null,
+                decoration: InputDecoration(
+                  isDense: true,
+                  contentPadding:
+                      const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                  suffixIcon: IconButton(
+                    onPressed: enabled
+                        ? () => setState(() => _obscure = !_obscure)
+                        : null,
+                    icon: Icon(
+                        _obscure ? Icons.visibility_off : Icons.visibility),
+                  ),
+                ),
+              ).workaroundFreezeLinuxMint(),
+            ),
+            const SizedBox(width: 12),
+            ElevatedButton(
+              onPressed: enabled ? _apply : null,
+              child: Text(translate('Apply')),
+            ),
+          ],
+        ),
+      ],
+    ).marginOnly(left: _kContentHMargin, right: _kContentHMargin, top: 8);
+  }
 }
 
 // ignore: non_constant_identifier_names

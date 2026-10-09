@@ -1574,6 +1574,15 @@ impl<T: InvokeUiSession> Remote<T> {
                             self.handler.lc.write().unwrap().enable_trusted_devices =
                                 lr.enable_trusted_devices;
                         }
+                        if client::retry_with_default_connect_password(
+                            self.handler.lc.clone(),
+                            &err,
+                            peer,
+                        )
+                        .await
+                        {
+                            return true;
+                        }
                         if !self.handler.handle_login_error(&err) {
                             return false;
                         }

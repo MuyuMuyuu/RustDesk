@@ -116,6 +116,15 @@ pub fn install_me(_options: String, _path: String, _silent: bool, _debug: bool) 
 
 #[inline]
 pub fn update_me(_path: String) {
+    // The home-page button is shown when the installed copy is older than the
+    // process that is running. Replace that installation with this executable
+    // instead of opening the first-time install window.
+    #[cfg(windows)]
+    {
+        allow_err!(crate::run_me(vec!["--update"]));
+        std::process::exit(0);
+    }
+    #[cfg(not(windows))]
     goto_install();
 }
 

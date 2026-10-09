@@ -211,6 +211,15 @@ async fn connect_and_login(
                         }
                         Some(message::Union::LoginResponse(lr)) => match lr.union {
                             Some(login_response::Union::Error(err)) => {
+                                if retry_with_default_connect_password(
+                                    interface.get_lch(),
+                                    &err,
+                                    &mut stream,
+                                )
+                                .await
+                                {
+                                    continue;
+                                }
                                 if !interface.handle_login_error(&err) {
                                     return Ok(None);
                                 }
@@ -454,6 +463,15 @@ async fn connect_and_login_mux(
                         }
                         Some(message::Union::LoginResponse(lr)) => match lr.union {
                             Some(login_response::Union::Error(err)) => {
+                                if retry_with_default_connect_password(
+                                    interface.get_lch(),
+                                    &err,
+                                    &mut stream,
+                                )
+                                .await
+                                {
+                                    continue;
+                                }
                                 if !interface.handle_login_error(&err) {
                                     return Ok(None);
                                 }

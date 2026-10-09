@@ -332,6 +332,15 @@ async fn login_terminal(handler: &ConsoleHandler, stream: &mut Stream) -> Result
                         );
                         continue;
                     }
+                    if client::retry_with_default_connect_password(
+                        handler.lc.clone(),
+                        &err,
+                        stream,
+                    )
+                    .await
+                    {
+                        continue;
+                    }
                     bail!(err);
                 }
                 Some(login_response::Union::PeerInfo(pi)) => {

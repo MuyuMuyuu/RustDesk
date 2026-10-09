@@ -310,6 +310,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Use permanent password", ""),
         ("Use both passwords", ""),
         ("Set permanent password", ""),
+        ("Default connect password", ""),
+        ("default-connect-password-tip", ""),
         ("Enable remote restart", ""),
         ("Restart remote device", ""),
         ("Are you sure you want to restart", ""),

@@ -310,6 +310,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Use permanent password", "使用固定密码"),
         ("Use both passwords", "同时使用两种密码"),
         ("Set permanent password", "设置固定密码"),
+        ("Default connect password", "默认连接密码"),
+        ("default-connect-password-tip", "第一次连接时使用一次；已保存的密码被拒绝时，再用它试一次"),
         ("Enable remote restart", "允许远程重启"),
         ("Restart remote device", "重启远程电脑"),
         ("Are you sure you want to restart", "确定要重启"),

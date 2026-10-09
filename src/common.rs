@@ -2253,11 +2253,17 @@ fn get_pk(pk: &[u8]) -> Option<[u8; 32]> {
 
 #[inline]
 pub fn get_rs_pk(str_base64: &str) -> Option<sign::PublicKey> {
-    if let Ok(pk) = crate::decode64(str_base64) {
-        get_pk(&pk).map(|x| sign::PublicKey(x))
-    } else {
-        None
-    }
+    let pk = crate::decode64(str_base64).ok()?;
+    // The network Key is the rendezvous public key. A libsodium signing secret
+    // key is 64 bytes, seed followed by that same public key, and that is what
+    // gets saved when the secret key is pasted into the Key field. Verification
+    // uses only the embedded public half.
+    let pk = match pk.len() {
+        32 => pk,
+        sign::SECRETKEYBYTES => pk[sign::PUBLICKEYBYTES..].to_vec(),
+        _ => return None,
+    };
+    get_pk(&pk).map(|x| sign::PublicKey(x))
 }
 
 pub fn decode_id_pk(signed: &[u8], key: &sign::PublicKey) -> ResultType<(String, [u8; 32])> {
@@ -3434,6 +3440,16 @@ mod tests {
     fn server_key() -> (String, sign::SecretKey) {
         let (pk, sk) = sign::gen_keypair();
         (encode64(pk.0), sk)
+    }
+
+    #[test]
+    fn get_rs_pk_reads_public_key_embedded_in_libsodium_secret_key() {
+        let (pk, sk) = sign::gen_keypair();
+        let from_public = get_rs_pk(&encode64(pk.0)).unwrap();
+        let from_secret = get_rs_pk(&encode64(sk.0)).unwrap();
+        assert_eq!(from_public.0, pk.0);
+        assert_eq!(from_secret.0, pk.0);
+        assert!(get_rs_pk("not-a-key").is_none());
     }
 
     fn signed_key_exchange(

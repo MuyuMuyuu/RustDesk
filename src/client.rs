@@ -2856,6 +2856,10 @@ pub struct LoginConfigHandler {
     hash: Hash,
     password: Vec<u8>, // remember password for reconnect
     pub remember: bool,
+    /// The current login was sent from the saved password, not typed in the dialog.
+    automatic_login: bool,
+    /// The shared default connect password was already submitted for this session.
+    tried_default_connect_password: bool,
     config: PeerConfig,
     pub port_forward: (String, i32),
     /// This login's `multiplex`, filled with `port_forward` under the turn
@@ -4716,7 +4720,7 @@ pub async fn handle_hash(
     }
 
     if password.is_empty() {
-        let p = crate::ui_interface::get_builtin_option(keys::OPTION_DEFAULT_CONNECT_PASSWORD);
+        let p = default_connect_password();
         if !p.is_empty() {
             let mut hasher = Sha256::new();
             hasher.update(p.clone());
@@ -4754,6 +4758,96 @@ pub async fn handle_hash(
 
     send_login(lc.clone(), String::new(), String::new(), password, peer).await;
     lc.write().unwrap().hash = hash;
+    lc.write().unwrap().automatic_login = true;
+    true
+}
+
+/// Password used when a shared config's saved password no longer decrypts.
+///
+/// A value in the normal config survives copying the config directory. The
+/// built-in option is the same key baked into a custom client.
+pub fn default_connect_password() -> String {
+    let configured = Config::get_option(keys::OPTION_DEFAULT_CONNECT_PASSWORD);
+    if !configured.is_empty() {
+        return configured;
+    }
+    get_builtin_option(keys::OPTION_DEFAULT_CONNECT_PASSWORD)
+}
+
+pub(crate) fn should_retry_default_connect_password(
+    err: &str,
+    automatic_login: bool,
+    already_tried: bool,
+    sent_password: &[u8],
+    hash: &Hash,
+    default_password: &str,
+) -> bool {
+    err == LOGIN_MSG_PASSWORD_WRONG
+        && automatic_login
+        && !already_tried
+        && !default_password.is_empty()
+        && !PasswordSource::equal(default_password, sent_password, hash)
+}
+
+/// After the saved password is rejected, log in once with [`default_connect_password`].
+///
+/// Returns true when that second login was sent. The caller waits for the next
+/// response instead of prompting.
+pub async fn retry_with_default_connect_password(
+    lc: Arc<RwLock<LoginConfigHandler>>,
+    err: &str,
+    peer: &mut Stream,
+) -> bool {
+    let default_password = default_connect_password();
+    let (automatic_login, already_tried, hash, sent_password) = {
+        let guard = lc.read().unwrap();
+        (
+            guard.automatic_login,
+            guard.tried_default_connect_password,
+            guard.hash.clone(),
+            guard.password.clone(),
+        )
+    };
+    if !should_retry_default_connect_password(
+        err,
+        automatic_login,
+        already_tried,
+        &sent_password,
+        &hash,
+        &default_password,
+    ) {
+        if PasswordSource::equal(&default_password, &sent_password, &hash) {
+            lc.write().unwrap().tried_default_connect_password = true;
+        }
+        return false;
+    }
+
+    let hashed = {
+        let mut hasher = Sha256::new();
+        hasher.update(default_password.as_bytes());
+        hasher.update(&hash.salt);
+        hasher.finalize()[..].to_vec()
+    };
+    {
+        let mut guard = lc.write().unwrap();
+        guard.tried_default_connect_password = true;
+        guard.automatic_login = true;
+        guard.password = hashed.clone();
+        guard.password_source = PasswordSource::Undefined;
+        guard.remember = true;
+    }
+    let mut hasher = Sha256::new();
+    hasher.update(&hashed);
+    hasher.update(&hash.challenge);
+    log::info!("saved password was rejected, retrying with the default connect password");
+    send_login(
+        lc,
+        String::new(),
+        String::new(),
+        hasher.finalize()[..].to_vec(),
+        peer,
+    )
+    .await;
     true
 }
 
@@ -4823,6 +4917,7 @@ pub async fn handle_login_from_ui(
     remember: bool,
     peer: &mut Stream,
 ) {
+    lc.write().unwrap().automatic_login = false;
     let mut hash_password = if password.is_empty() {
         let mut password2 = lc.read().unwrap().password.clone();
         if password2.is_empty() {
@@ -5188,7 +5283,8 @@ pub fn check_if_retry(msgtype: &str, title: &str, text: &str, retry_for_relay: b
 
 #[cfg(test)]
 mod retry_tests {
-    use super::check_if_retry;
+    use super::{check_if_retry, should_retry_default_connect_password, Hash, LOGIN_MSG_PASSWORD_WRONG};
+    use hbb_common::sha2::{Digest, Sha256};
 
     #[test]
     fn incoming_only_error_is_not_retryable() {
@@ -5197,6 +5293,62 @@ mod retry_tests {
             "Connection Error",
             "Incoming only mode",
             false,
+        ));
+    }
+
+    fn salt_hash(password: &str, salt: &[u8]) -> Vec<u8> {
+        let mut hasher = Sha256::new();
+        hasher.update(password);
+        hasher.update(salt);
+        hasher.finalize()[..].to_vec()
+    }
+
+    #[test]
+    fn wrong_saved_password_retries_the_default_once() {
+        let hash = Hash {
+            salt: vec![1, 2, 3].into(),
+            ..Default::default()
+        };
+        let saved = salt_hash("old-machine", &hash.salt);
+        assert!(should_retry_default_connect_password(
+            LOGIN_MSG_PASSWORD_WRONG,
+            true,
+            false,
+            &saved,
+            &hash,
+            "shared-secret",
+        ));
+        assert!(!should_retry_default_connect_password(
+            LOGIN_MSG_PASSWORD_WRONG,
+            true,
+            true,
+            &saved,
+            &hash,
+            "shared-secret",
+        ));
+        assert!(!should_retry_default_connect_password(
+            LOGIN_MSG_PASSWORD_WRONG,
+            false,
+            false,
+            &saved,
+            &hash,
+            "shared-secret",
+        ));
+        assert!(!should_retry_default_connect_password(
+            LOGIN_MSG_PASSWORD_WRONG,
+            true,
+            false,
+            &salt_hash("shared-secret", &hash.salt),
+            &hash,
+            "shared-secret",
+        ));
+        assert!(!should_retry_default_connect_password(
+            "Offline",
+            true,
+            false,
+            &saved,
+            &hash,
+            "shared-secret",
         ));
     }
 }
